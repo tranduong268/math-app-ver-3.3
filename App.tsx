@@ -8,7 +8,6 @@ import GameScreen from './src/components/GameScreen'; // Updated path
 import { ReviewScreen } from './components/ReviewScreen';
 import UnlockNotificationModal from './components/UnlockNotificationModal';
 import ResetConfirmationModal from './components/ResetConfirmationModal';
-import StartScreen from './src/components/StartScreen'; // New component for audio unlocking
 import {
   saveIncorrectSessionToStorage,
   getIncorrectSessionsFromStorage,
@@ -25,7 +24,7 @@ import { theme } from './src/config/theme';
 type Screen = 'MENU' | 'GAME' | 'REVIEW';
 
 const App: React.FC = () => {
-  const { playMusic, stopMusic, isMuted, toggleMute, isAudioUnlocked, unlockAudio } = useAudio();
+  const { playMusic, stopMusic, isMuted, toggleMute, isAudioUnlocked } = useAudio();
   const [currentScreen, setCurrentScreen] = useState<Screen>('MENU');
   const [currentGameMode, setCurrentGameMode] = useState<GameMode | null>(null);
   const [reviewSessions, setReviewSessions] = useState<StoredSession[]>([]);
@@ -152,10 +151,6 @@ const App: React.FC = () => {
   const handleCancelResetProgress = useCallback(() => {
     setShowResetConfirmation(false);
   }, []);
-
-  if (!isAudioUnlocked) {
-    return <StartScreen onStart={unlockAudio} />;
-  }
 
   return (
     <div className={theme.sizing.mainContainer}>
