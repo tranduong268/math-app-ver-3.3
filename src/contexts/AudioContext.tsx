@@ -87,18 +87,20 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const unlockAudio = useCallback(async () => {
     const success = await audioService.unlockAudio();
-    // Always set unlocked to true to allow the app to start,
-    // even if the audio context failed to initialize.
-    // The app can then run silently.
-    setIsAudioUnlocked(true);
-    if (!success) {
-        console.warn("Audio failed to unlock. The app will run silently.");
-        // If not already muted, mute the app to prevent further errors.
-        if (!isMuted) {
-            toggleMute();
-        }
+    if (success) {
+      setIsAudioUnlocked(true);
+    } else {
+      console.warn("Audio failed to unlock. The app will run silently.");
+      // Even if unlocking fails, we proceed to the app in a muted state
+      // to avoid getting stuck on the start screen.
+      setIsAudioUnlocked(true); 
+      if (!isMuted) {
+          setIsMuted(true);
+          audioService.setMutedState(true);
+          localStorage.setItem(AUDIO_MUTED_KEY, JSON.stringify(true));
+      }
     }
-  }, [isMuted, toggleMute]);
+  }, [isMuted]);
 
   const playSound = useCallback((key: SoundKey) => {
     audioService.playSound(key);
