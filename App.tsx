@@ -19,12 +19,13 @@ import {
   saveMasterUsedIcons,
   clearMasterUsedIcons
 } from './services/localStorageService';
+import { audioService } from './src/services/audioService'; // Import the service singleton
 import { theme } from './src/config/theme';
 
 type Screen = 'MENU' | 'GAME' | 'REVIEW';
 
 const App: React.FC = () => {
-  const { playMusic, stopMusic, isMuted, toggleMute, isAudioUnlocked } = useAudio();
+  const { playMusic, stopMusic, isMuted, toggleMute } = useAudio();
   const [currentScreen, setCurrentScreen] = useState<Screen>('MENU');
   const [currentGameMode, setCurrentGameMode] = useState<GameMode | null>(null);
   const [reviewSessions, setReviewSessions] = useState<StoredSession[]>([]);
@@ -45,15 +46,33 @@ const App: React.FC = () => {
     setTotalStarsState(getTotalStars());
     setUnlockedSetIdsState(getUnlockedSetIds());
     setMasterUsedIconsList(getMasterUsedIcons());
+
+    // Add a one-time event listener to unlock the browser's audio context.
+    const handleFirstInteraction = () => {
+      audioService.userHasInteracted();
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+    };
+
+    document.addEventListener('click', handleFirstInteraction);
+    document.addEventListener('touchstart', handleFirstInteraction);
+    document.addEventListener('keydown', handleFirstInteraction);
+
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+    };
   }, []);
 
   useEffect(() => {
-    if (isAudioUnlocked && currentScreen === 'MENU' && !isMuted) {
+    if (currentScreen === 'MENU' && !isMuted) {
       playMusic('BACKGROUND_MUSIC');
     } else {
       stopMusic();
     }
-  }, [currentScreen, playMusic, stopMusic, isMuted, isAudioUnlocked]);
+  }, [currentScreen, playMusic, stopMusic, isMuted]);
 
   const handleSetDifficulty = useCallback((level: DifficultyLevel) => {
     setCurrentDifficultyLevel(level);
@@ -151,6 +170,7 @@ const App: React.FC = () => {
   const handleCancelResetProgress = useCallback(() => {
     setShowResetConfirmation(false);
   }, []);
+
 
   return (
     <div className={theme.sizing.mainContainer}>

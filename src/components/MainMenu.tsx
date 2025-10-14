@@ -29,18 +29,13 @@ interface MenuItem {
 }
 
 const MenuButton: React.FC<{ item: MenuItem; onClick?: () => void }> = ({ item, onClick }) => {
-  const { playSound, isAudioUnlocked, unlockAudio } = useAudio();
-  
-  const handleClick = async () => {
-    if (!isAudioUnlocked) {
-      await unlockAudio();
-    }
+  const { playSound } = useAudio();
+  const handleClick = () => {
     playSound('BUTTON_CLICK');
     if (onClick) {
       onClick();
     }
   };
-
   return (
     <button
       onClick={handleClick}
@@ -66,7 +61,10 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStartGame, onShowReview, totalSta
 
   const handleShowReviewWithSound = useCallback(() => {
     playSound('DECISION');
-    onShowReview();
+    // Add a small delay to allow the sound to play before the component unmounts
+    setTimeout(() => {
+        onShowReview();
+    }, 300);
   }, [onShowReview, playSound]);
 
   const gameModeItems = useMemo<MenuItem[]>(() => [

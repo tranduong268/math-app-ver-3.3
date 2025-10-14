@@ -11,11 +11,9 @@ interface AudioContextType {
   toggleMute: () => void;
   isMuted: boolean;
   playPrompt: (keys: SoundKey[]) => void;
-  playPromptAndWait: (keys: SoundKey[]) => Promise<void>;
+  playPromptAndWait: (keys: SoundKey[]) => Promise<void>; // New async function
   cancelPrompt: () => void;
-  isPromptPlaying: boolean;
-  isAudioUnlocked: boolean; // Is the audio context active?
-  unlockAudio: () => Promise<void>; // Function to activate audio
+  isPromptPlaying: boolean; // New state to track if a prompt is active
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -41,29 +39,30 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   });
   
   const [isPromptPlaying, setIsPromptPlaying] = useState(false);
-  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
 
   useEffect(() => {
     audioService.setMutedState(isMuted);
   }, [isMuted]);
 
   useEffect(() => {
+    // Set up callbacks for the audio service to update our React state
     audioService.setCallbacks({
       onPromptStart: () => setIsPromptPlaying(true),
       onPromptEnd: () => setIsPromptPlaying(false),
     });
     
     return () => {
+      // Clean up callbacks when the provider unmounts
       audioService.setCallbacks({});
     }
   }, []);
 
+  // Effect to handle browser tab visibility changes
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         audioService.wakeupAudio();
       } else {
-        audioService.stopLowTimeWarning();
         audioService.cancelPrompt();
       }
     };
@@ -75,32 +74,6 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   }, []);
 
-  const toggleMute = useCallback(() => {
-    const newMutedState = audioService.toggleMute();
-    setIsMuted(newMutedState);
-    try {
-      localStorage.setItem(AUDIO_MUTED_KEY, JSON.stringify(newMutedState));
-    } catch (e) {
-      console.error("Failed to save mute state to localStorage", e);
-    }
-  }, []);
-
-  const unlockAudio = useCallback(async () => {
-    const success = await audioService.unlockAudio();
-    if (success) {
-      setIsAudioUnlocked(true);
-    } else {
-      console.warn("Audio failed to unlock. The app will run silently.");
-      // Even if unlocking fails, we proceed to the app in a muted state
-      // to avoid getting stuck on the start screen.
-      setIsAudioUnlocked(true); 
-      if (!isMuted) {
-          setIsMuted(true);
-          audioService.setMutedState(true);
-          localStorage.setItem(AUDIO_MUTED_KEY, JSON.stringify(true));
-      }
-    }
-  }, [isMuted]);
 
   const playSound = useCallback((key: SoundKey) => {
     audioService.playSound(key);
@@ -122,6 +95,16 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     audioService.stopLowTimeWarning();
   }, []);
 
+  const toggleMute = useCallback(() => {
+    const newMutedState = audioService.toggleMute();
+    setIsMuted(newMutedState);
+    try {
+      localStorage.setItem(AUDIO_MUTED_KEY, JSON.stringify(newMutedState));
+    } catch (e) {
+      console.error("Failed to save mute state to localStorage", e);
+    }
+  }, []);
+
   const playPrompt = useCallback((keys: SoundKey[]) => {
     audioService.playPrompt(keys);
   }, []);
@@ -134,21 +117,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     audioService.cancelPrompt();
   }, []);
 
-  const value = { 
-    playSound, 
-    playMusic, 
-    stopMusic, 
-    playLowTimeWarning, 
-    stopLowTimeWarning, 
-    toggleMute, 
-    isMuted, 
-    playPrompt, 
-    playPromptAndWait, 
-    cancelPrompt, 
-    isPromptPlaying,
-    isAudioUnlocked,
-    unlockAudio
-  };
+  const value = { playSound, playMusic, stopMusic, playLowTimeWarning, stopLowTimeWarning, toggleMute, isMuted, playPrompt, playPromptAndWait, cancelPrompt, isPromptPlaying };
 
   return (
     <AudioContext.Provider value={value}>

@@ -62,9 +62,8 @@ class AudioService {
   }
 
   private initPromptAudioContext() {
-    if (this.promptAudioContext) return;
+    if (this.promptAudioContext || !this.hasInteracted) return;
     try {
-        // We can only create the context after a user gesture, which is handled by unlockAudio.
         this.promptAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         this.promptGainNode = this.promptAudioContext.createGain();
         this.promptGainNode.gain.value = 2.0; // Boost volume for prompts by 2x
@@ -74,49 +73,32 @@ class AudioService {
     }
   }
   
-  public async unlockAudio(): Promise<boolean> {
-    if (this.hasInteracted) return true;
+  public userHasInteracted = () => {
+    if (this.hasInteracted) return;
+    this.hasInteracted = true;
+    this.initPromptAudioContext(); // Initialize on first interaction
+    this.wakeupAudio();
     
-    this.initPromptAudioContext();
-
-    try {
-      // Resume Web Audio API context if it's suspended. This is crucial for iOS.
-      if (this.promptAudioContext && this.promptAudioContext.state === 'suspended') {
-        await this.promptAudioContext.resume();
-      }
-      
-      // Play a silent sound using a Data URI, which is more reliable than a file path.
-      const silentPlayer = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-      silentPlayer.volume = 0;
-      await silentPlayer.play();
-
-      this.hasInteracted = true;
-
-      // If music was requested before interaction, play it now.
-      if (this.pendingMusicKey) {
-        const keyToPlay = this.pendingMusicKey;
-        this.pendingMusicKey = null;
-        this.playMusic(keyToPlay);
-      }
-      return true;
-
-    } catch (error) {
-        console.error("Failed to unlock audio context:", error);
-        // Critical: mark as interacted to allow the app to proceed without sound,
-        // preventing the user from being stuck on the start screen.
-        this.hasInteracted = true; 
-        this.pendingMusicKey = null; // Clear any pending music on failure.
-        return false;
+    if (this.pendingMusicKey) {
+      const keyToPlay = this.pendingMusicKey;
+      this.pendingMusicKey = null;
+      this.playMusic(keyToPlay);
     }
-  }
+  };
 
   public wakeupAudio = () => {
+    if (!this.hasInteracted) return;
     // For Web Audio API context
     if (this.promptAudioContext && this.promptAudioContext.state === 'suspended') {
-        this.promptAudioContext.resume().catch(e => console.error("Error resuming audio context on wakeup:", e));
+        this.promptAudioContext.resume();
     }
-    // For HTML Audio elements, the silent audio trick in unlockAudio is usually enough.
-    // This can be called when tab visibility changes.
+    // For HTML Audio elements
+    const player = this.audioPool[this.poolIndex];
+    if (player && player.paused) {
+        player.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+        player.volume = 0;
+        player.play().catch(() => {});
+    }
   }
 
   public setCallbacks({ onPromptStart, onPromptEnd }: { onPromptStart?: () => void; onPromptEnd?: () => void }) {
@@ -125,8 +107,8 @@ class AudioService {
   }
 
   playSound(key: SoundKey) {
-    if (this.isMuted || !this.hasInteracted) return;
     this.wakeupAudio(); 
+    if (this.isMuted || !this.hasInteracted) return;
 
     const asset = AudioAssets[key];
     if (!asset) {
@@ -175,8 +157,8 @@ class AudioService {
   }
 
   playLowTimeWarning = () => {
-    if (this.isMuted || !this.hasInteracted) return;
     this.wakeupAudio();
+    if (this.isMuted || !this.hasInteracted) return;
 
     const asset = AudioAssets.TIMER_LOW;
     if (!asset || Array.isArray(asset.path)) return;
@@ -205,11 +187,11 @@ class AudioService {
   }
 
   playMusic(key: SoundKey) {
+    this.wakeupAudio();
     if (!this.hasInteracted) {
       this.pendingMusicKey = key;
       return;
     }
-    this.wakeupAudio();
 
     const asset = AudioAssets[key];
     if (!asset || Array.isArray(asset.path)) {
@@ -262,8 +244,8 @@ class AudioService {
   }
 
   public playPrompt = async (keys: SoundKey[]) => {
-    if (this.isMuted || !this.hasInteracted) return;
     this.wakeupAudio();
+    if (this.isMuted || !this.hasInteracted) return;
 
     // Use Web Audio API if available for volume boost
     if (this.promptAudioContext && this.promptGainNode) {
@@ -318,10 +300,10 @@ class AudioService {
    * This is ideal for situations where an action must wait for an audio cue to finish.
    */
   public async playPromptAndWait(keys: SoundKey[]): Promise<void> {
+    this.wakeupAudio();
     if (this.isMuted || !this.hasInteracted || this.isPromptPlaying) {
       return Promise.resolve();
     }
-    this.wakeupAudio();
     
     // Set global playing state via callbacks
     this.isPromptPlaying = true;
@@ -441,6 +423,7 @@ class AudioService {
   }
 
   toggleMute() {
+    this.userHasInteracted();
     this.isMuted = !this.isMuted;
     
     if (this.isMuted) {
@@ -448,8 +431,6 @@ class AudioService {
       if (this.lowTimeSound) this.lowTimeSound.pause();
       this.cancelPrompt();
       this.audioPool.forEach(player => player.pause());
-    } else if (this.backgroundMusic && this.backgroundMusic.paused) {
-        this.backgroundMusic.play().catch(e => console.error("Error resuming music on unmute:", e));
     }
     return this.isMuted;
   }
