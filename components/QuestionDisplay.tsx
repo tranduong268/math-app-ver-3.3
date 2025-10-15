@@ -1,5 +1,5 @@
 import React from 'react';
-import { Question, MathQuestion, ComparisonQuestion, CountingQuestion, NumberRecognitionQuestion, MatchingPairsQuestion, NumberSequenceQuestion, VisualPatternQuestion, OddOneOutQuestion } from '../types';
+import { Question, MathQuestion, ComparisonQuestion, CountingQuestion, NumberRecognitionQuestion, MatchingPairsQuestion, NumberSequenceQuestion, VisualPatternQuestion, OddOneOutQuestion, GameMode } from '../types';
 
 // Import all the new specialized question components
 import MathQuestionDisplay from '../src/components/questions/MathQuestion';
@@ -18,9 +18,10 @@ interface QuestionDisplayProps {
   onAnswer: (answer: string | number | string[] | boolean) => void; 
   disabled: boolean;
   lastAnswer?: string | number | string[] | boolean; 
+  mode: GameMode; // Added to pass game context
 }
 
-const QuestionDisplay: React.FC<QuestionDisplayProps> = ({ question, onAnswer, disabled, lastAnswer }) => {
+const QuestionDisplay: React.FC<QuestionDisplayProps> = ({ question, onAnswer, disabled, lastAnswer, mode }) => {
   
   const renderQuestion = () => {
     switch(question.type) {
@@ -35,7 +36,7 @@ const QuestionDisplay: React.FC<QuestionDisplayProps> = ({ question, onAnswer, d
       case 'matching_pairs':
         return <MatchingPairsDisplay question={question as MatchingPairsQuestion} onAnswer={onAnswer} disabled={disabled} />;
       case 'number_sequence':
-        return <NumberSequenceDisplay question={question as NumberSequenceQuestion} onAnswer={onAnswer} disabled={disabled} lastAnswer={lastAnswer} />;
+        return <NumberSequenceDisplay question={question as NumberSequenceQuestion} onAnswer={onAnswer} disabled={disabled} lastAnswer={lastAnswer} mode={mode} />;
       case 'visual_pattern':
         return <VisualPatternDisplay question={question as VisualPatternQuestion} onAnswer={onAnswer} disabled={disabled} lastAnswer={lastAnswer} />;
       case 'odd_one_out':

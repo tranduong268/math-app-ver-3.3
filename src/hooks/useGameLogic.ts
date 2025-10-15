@@ -1,5 +1,3 @@
-
-
 import { useEffect, useCallback, useReducer, useRef } from 'react';
 import { 
   GameMode, DifficultyLevel, Question, IncorrectAttempt, MatchingPairsQuestion, EndGameMessageInfo, 
@@ -63,7 +61,7 @@ const createEndGameMessage = (score: number, totalQuestions: number, isTimeUp: b
     }
 };
 
-const checkIsCorrect = (question: Question, userAnswer: string | number | string[] | boolean): boolean => {
+const checkIsCorrect = (question: Question, userAnswer: string | number | string[] | boolean, mode: GameMode): boolean => {
     const userAnswerStr = Array.isArray(userAnswer) ? userAnswer.join(',') : userAnswer.toString();
     switch (question.type) {
         case 'math': {
@@ -91,9 +89,32 @@ const checkIsCorrect = (question: Question, userAnswer: string | number | string
         }
         case 'number_sequence': {
             const nsQ = question as NumberSequenceQuestion;
+            // Special handling for simplified versions in timed challenge
+            if (mode === GameMode.COMPREHENSIVE_CHALLENGE) {
+                if (nsQ.variant === 'fill_in_the_blanks') {
+                    const userAnswersArray = Array.isArray(userAnswer) ? userAnswer.map(n => parseInt(n, 10)) : [];
+                    if (userAnswersArray.length !== nsQ.answers.length) return false;
+                    return userAnswersArray.every((val, index) => val === nsQ.answers[index]);
+                }
+                if (nsQ.variant === 'rule_detective') {
+                    // Answer format is "index:value", e.g. "4:10"
+                    const answerStr = userAnswer.toString();
+                    if (!answerStr.includes(':')) return false;
+
+                    const [indexStr, valueStr] = answerStr.split(':');
+                    const userIndex = parseInt(indexStr, 10);
+                    const userValue = parseInt(valueStr, 10);
+                    
+                    const correctIndex = parseInt(Object.keys(nsQ.errors)[0], 10);
+                    const correctValue = Object.values(nsQ.errors)[0];
+
+                    if (isNaN(userIndex) || isNaN(userValue)) return false;
+
+                    return userIndex === correctIndex && userValue === correctValue;
+                }
+            }
+            // Existing logic for interactive and sort modes
             if (nsQ.variant === 'fill_in_the_blanks' || nsQ.variant === 'rule_detective') {
-                // For the new interactive modes, the component handles internal validation.
-                // It sends `true` only upon successful completion of all steps.
                 return userAnswer === true;
             }
             if (nsQ.variant === 'sort_sequence') {
@@ -141,7 +162,7 @@ const initialState: GameReducerState = {
     playerState: PlayerPerformanceState.NEUTRAL,
     consecutiveCorrect: 0,
     consecutiveIncorrect: 0,
-    questionStartTime: 0,
+    questionStartTime: 0, // timestamp
     zerosUsed: 0,
 };
 
@@ -496,7 +517,7 @@ const useGameLogic = ({ mode, difficulty, unlockedSetIds, masterUsedIcons, onEnd
     if (state.isInputDisabled || !currentQuestion || currentQuestion.type === 'matching_pairs' || gameStatus !== 'playing') return;
     
     dispatch({ type: 'SET_LAST_ANSWER', payload: { answer: userAnswer } });
-    const isCorrect = checkIsCorrect(currentQuestion, userAnswer);
+    const isCorrect = checkIsCorrect(currentQuestion, userAnswer, mode);
     const answerTime = Date.now() - state.questionStartTime;
 
     dispatch({
@@ -519,7 +540,7 @@ const useGameLogic = ({ mode, difficulty, unlockedSetIds, masterUsedIcons, onEnd
     setTimeout(() => {
         goToNextQuestionAfterFeedback();
     }, delay);
-  }, [state.isInputDisabled, currentQuestion, gameStatus, playSound, state.questionStartTime, goToNextQuestionAfterFeedback]);
+  }, [state.isInputDisabled, currentQuestion, gameStatus, playSound, state.questionStartTime, goToNextQuestionAfterFeedback, mode]);
 
   const selectMatchingPairItem = useCallback((itemIdOrOutcome: string) => {
     if (!state.currentMatchingQuestionState || state.isInputDisabled || gameStatus !== 'playing') return;

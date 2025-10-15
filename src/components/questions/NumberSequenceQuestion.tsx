@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
-import { NumberSequenceQuestion, FillInTheBlanksQuestion, RuleDetectiveQuestion, SortSequenceQuestion } from '../../../types';
+import { NumberSequenceQuestion, FillInTheBlanksQuestion, RuleDetectiveQuestion, SortSequenceQuestion, GameMode } from '../../../types';
 import { useAudio } from '../../contexts/AudioContext';
 import { theme } from '../../config/theme';
 import { QuestionComponentProps } from './QuestionProps';
@@ -59,6 +59,159 @@ const getRuleSoundKey = (step: number, variant: 'fill_blanks' | 'rule_detective'
     }
 };
 
+// =================================================================
+// SIMPLIFIED COMPONENTS FOR TIMED CHALLENGE MODE
+// =================================================================
+
+const SimplifiedFillBlanksDisplay: React.FC<QuestionComponentProps<FillInTheBlanksQuestion>> = ({ question, onAnswer, disabled }) => {
+    const { playSound } = useAudio();
+    const [inputValues, setInputValues] = useState<string[]>(() => Array(question.answers.length).fill(''));
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    useEffect(() => {
+        setInputValues(Array(question.answers.length).fill(''));
+        setActiveIndex(0);
+    }, [question.id, question.answers.length]);
+
+    const handleSubmit = () => {
+        if (disabled || inputValues.some(v => v === '')) return;
+        playSound('DECISION');
+        onAnswer(inputValues);
+    };
+
+    const handleNumpadInput = (num: string) => {
+        if (disabled) return;
+        playSound('TYPE');
+        const newInputValues = [...inputValues];
+        const currentVal = newInputValues[activeIndex] || '';
+        if (currentVal.length < 2) {
+            newInputValues[activeIndex] = currentVal + num;
+            setInputValues(newInputValues);
+        }
+    };
+    
+    const handleNumpadDelete = () => {
+        if (disabled) return;
+        playSound('TYPE');
+        const newInputValues = [...inputValues];
+        newInputValues[activeIndex] = (newInputValues[activeIndex] || '').slice(0, -1);
+        setInputValues(newInputValues);
+    };
+
+    let blankCounter = -1;
+    const itemBaseClass = `font-bold rounded-lg shadow-md transition-all transform flex items-center justify-center ${theme.inputs.sequenceItem}`;
+
+    return (
+        <div className="flex flex-col items-center w-full">
+            <p className="text-xl md:text-2xl font-semibold text-gray-700 mb-4">Điền số còn thiếu:</p>
+            <div className="w-full min-h-[120px] p-4 flex flex-wrap items-center justify-center gap-x-1 md:gap-x-2">
+                {question.sequence.map((part, index) => {
+                    if (part === null) {
+                        blankCounter++;
+                        const currentBlankIndex = blankCounter;
+                        const isActive = currentBlankIndex === activeIndex;
+                        return (
+                            <button
+                                key={`blank-${index}`}
+                                onClick={() => setActiveIndex(currentBlankIndex)}
+                                disabled={disabled}
+                                className={`${itemBaseClass} ${theme.fontSizes.sequenceInput} ${theme.colors.bg.sequenceTrainBlank} text-center cursor-pointer ${isActive ? `ring-2 ${theme.colors.border.sequenceItemActive}` : ''}`}
+                            >
+                                <span className={inputValues[currentBlankIndex] ? 'text-pink-600' : 'text-gray-400'}>
+                                    {inputValues[currentBlankIndex] || '?'}
+                                </span>
+                            </button>
+                        );
+                    }
+                    return (
+                        <div key={`num-${index}`} className={`${itemBaseClass} ${theme.fontSizes.sequenceNumber} text-white ${theme.colors.bg.sequenceTrainPrimary}`}>
+                            {part}
+                        </div>
+                    );
+                })}
+            </div>
+            {!disabled && <CustomNumpad onInput={handleNumpadInput} onDelete={handleNumpadDelete} onEnter={handleSubmit} />}
+        </div>
+    );
+};
+
+
+const SimplifiedRuleDetectiveDisplay: React.FC<QuestionComponentProps<RuleDetectiveQuestion>> = ({ question, onAnswer, disabled }) => {
+    const { playSound } = useAudio();
+    const [selectedErrorIndex, setSelectedErrorIndex] = useState<number | null>(null);
+    const [correctionValue, setCorrectionValue] = useState<string>('');
+
+    useEffect(() => {
+        setSelectedErrorIndex(null);
+        setCorrectionValue('');
+    }, [question.id]);
+
+    const handleSelectNumber = (index: number) => {
+        if (disabled) return;
+        playSound('BUTTON_CLICK');
+        setSelectedErrorIndex(index);
+        setCorrectionValue(''); // Clear previous input when selecting a new number
+    };
+
+    const handleSubmit = () => {
+        if (disabled || selectedErrorIndex === null || correctionValue.trim() === '') return;
+        playSound('DECISION');
+        // Submit both the index and the value, separated by a colon
+        onAnswer(`${selectedErrorIndex}:${correctionValue}`);
+    };
+
+    const handleNumpadInput = (num: string) => {
+        if (disabled || selectedErrorIndex === null) return;
+        playSound('TYPE');
+        setCorrectionValue(prev => (prev.length < 2 ? prev + num : prev));
+    };
+
+    const handleNumpadDelete = () => {
+        if (disabled || selectedErrorIndex === null) return;
+        playSound('TYPE');
+        setCorrectionValue(prev => prev.slice(0, -1));
+    };
+    
+    const itemBaseClass = `font-bold rounded-lg shadow-md transition-all transform flex items-center justify-center ${theme.inputs.sequenceItem}`;
+
+    return (
+        <div className="flex flex-col items-center w-full gap-y-4">
+            <p className="text-xl md:text-2xl font-semibold text-gray-700 text-center">Dãy số có một lỗi sai. Sửa lại cho đúng:</p>
+            <div className="w-full p-4 bg-sky-100 rounded-lg flex flex-wrap items-center justify-center gap-2">
+                {question.sequenceWithErrors.map((num, i) => {
+                    const isSelected = selectedErrorIndex === i;
+                    return (
+                        <button 
+                            key={i}
+                            onClick={() => handleSelectNumber(i)}
+                            disabled={disabled}
+                            className={`${itemBaseClass} ${theme.fontSizes.sequenceNumber} 
+                                ${isSelected 
+                                    ? `${theme.colors.bg.sequenceTrainBlank} ring-2 ${theme.colors.border.sequenceItemActive}` 
+                                    : `text-white ${theme.colors.bg.sequenceTrainPrimary} hover:bg-blue-500`
+                                }
+                            `}
+                        >
+                           {isSelected ? 
+                                <span className={correctionValue ? 'text-pink-600' : 'text-gray-400'}>
+                                    {correctionValue || '?'}
+                                </span> 
+                                : num
+                            }
+                        </button>
+                    )
+                })}
+            </div>
+            
+            {!disabled && <CustomNumpad onInput={handleNumpadInput} onDelete={handleNumpadDelete} onEnter={handleSubmit} />}
+        </div>
+    );
+};
+
+
+// =================================================================
+// ORIGINAL INTERACTIVE COMPONENTS (FOR STANDARD MODE)
+// =================================================================
 
 // --- Rule Detective Component (New flow based on user feedback) ---
 const RuleDetectiveDisplay: React.FC<QuestionComponentProps<RuleDetectiveQuestion>> = ({ question, onAnswer, disabled }) => {
@@ -759,7 +912,21 @@ const SortSequenceDisplay: React.FC<QuestionComponentProps<SortSequenceQuestion>
 
 // --- Main Component ---
 const NumberSequenceDisplay: React.FC<QuestionComponentProps<NumberSequenceQuestion>> = (props) => {
-  switch (props.question.variant) {
+  const { question, mode } = props;
+
+  const isSimplifiedMode = mode === GameMode.COMPREHENSIVE_CHALLENGE;
+
+  if (isSimplifiedMode) {
+    if (question.variant === 'fill_in_the_blanks') {
+        return <SimplifiedFillBlanksDisplay {...props as QuestionComponentProps<FillInTheBlanksQuestion>} />;
+    }
+    if (question.variant === 'rule_detective') {
+        return <SimplifiedRuleDetectiveDisplay {...props as QuestionComponentProps<RuleDetectiveQuestion>} />;
+    }
+  }
+
+  // Fallback to existing interactive components for non-challenge mode or for 'sort_sequence'
+  switch (question.variant) {
     case 'rule_detective':
         return <RuleDetectiveDisplay {...props as QuestionComponentProps<RuleDetectiveQuestion>} />;
     case 'fill_in_the_blanks':

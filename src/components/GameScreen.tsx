@@ -199,6 +199,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ mode, difficulty, onEndGame, on
         onAnswer={currentQuestion.type === 'matching_pairs' ? selectMatchingPairItem : submitAnswer}
         disabled={isInputDisabled || (isTimedMode && gameStatus !== 'playing')}
         lastAnswer={lastSubmittedAnswer}
+        mode={mode}
       />
 
       {feedbackMessage && feedbackType && (
